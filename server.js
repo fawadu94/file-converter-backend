@@ -6,19 +6,16 @@ require('dotenv').config();
 const convertRoutes = require('./routes/convert');
 
 const app = express();
+
+// ✅ Railway sets PORT automatically (8080), this handles both local and Railway
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve output files as static (for download)
 app.use('/outputs', express.static(path.join(__dirname, 'outputs')));
-
-// Routes
 app.use('/api/convert', convertRoutes);
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ message: 'File Converter API is running!' });
 });
