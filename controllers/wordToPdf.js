@@ -10,30 +10,36 @@ const wordToPdf = async (req, res) => {
 
     const inputPath = path.resolve(req.file.path);
     const outputDir = path.resolve('outputs');
+
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
     const outputFileName = path.basename(inputPath, path.extname(inputPath)) + '.pdf';
     const outputPath = path.join(outputDir, outputFileName);
 
-    // Convert using LibreOffice
     await convertWithLibreOffice(inputPath, outputDir, 'pdf');
 
-    // Check if output exists
     if (!fs.existsSync(outputPath)) {
       return res.status(500).json({ error: 'Conversion failed - output not found' });
     }
 
-    // Return download URL
+    // ✅ Use the actual host from request headers (works for both Railway and local)
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const downloadUrl = `${protocol}://${host}/outputs/${outputFileName}`;
+
     res.json({
       success: true,
-      message: 'Word converted to PDF successfully',
-      downloadUrl: `http://localhost:3000/outputs/${outputFileName}`,
+      message: 'Converted successfully',
+      downloadUrl,
       fileName: outputFileName
     });
 
-    // Clean up uploaded file
-    fs.unlinkSync(inputPath);
+    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
 
   } catch (error) {
-    console.error(error);
+    console.error('❌ Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 };
