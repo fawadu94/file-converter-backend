@@ -13,52 +13,47 @@ const pdfToWord = async (req, res) => {
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     const baseName = path.basename(inputPath, path.extname(inputPath));
-    const isWindows = process.platform === 'win32';
-    const soffice = isWindows
-      ? '"C:\\Program Files\\LibreOffice\\program\\soffice.exe"'
-      : 'libreoffice';
-
-    // Step 1: PDF → ODT
-    await new Promise((resolve, reject) => {
-      exec(
-        `${soffice} --headless --convert-to odt "${inputPath}" --outdir "${outputDir}"`,
-        { timeout: 60000 },
-        (err, stdout, stderr) => {
-          console.log('Step1 stdout:', stdout);
-          console.log('Step1 stderr:', stderr);
-          if (err) return reject(new Error('PDF to ODT failed: ' + stderr));
-          resolve(stdout);
-        }
-      );
-    });
-
-    const odtPath = path.join(outputDir, baseName + '.odt');
-
-    // Step 2: ODT → DOCX
-    await new Promise((resolve, reject) => {
-      exec(
-        `${soffice} --headless --convert-to docx "${odtPath}" --outdir "${outputDir}"`,
-        { timeout: 60000 },
-        (err, stdout, stderr) => {
-          console.log('Step2 stdout:', stdout);
-          console.log('Step2 stderr:', stderr);
-          if (err) return reject(new Error('ODT to DOCX failed: ' + stderr));
-          resolve(stdout);
-        }
-      );
-    });
-
-    if (fs.existsSync(odtPath)) fs.unlinkSync(odtPath);
-
     const docxPath = path.join(outputDir, baseName + '.docx');
 
+    // Path to our python script
+    const scriptPath = path.resolve(__dirname, '../services/convert_pdf.py');
+
+    console.log('Input PDF:', inputPath);
+    console.log('Output DOCX:', docxPath);
+    console.log('Script:', scriptPath);
+
+    // Use pdf2docx Python library
+    await new Promise((resolve, reject) => {
+      const cmd = `python3 "${scriptPath}" "${inputPath}" "${docxPath}"`;
+      console.log('Running:', cmd);
+
+      exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+        console.log('stdout:', stdout);
+        console.log('stderr:', stderr);
+        if (err) {
+          return reject(new Error('Python conversion failed: ' + stderr));
+        }
+        resolve(stdout);
+      });
+    });
+
+    // Verify output exists
     if (!fs.existsSync(docxPath)) {
+      const files = fs.readdirSync(outputDir);
+      console.log('Files in output dir:', files);
       return res.status(500).json({ error: 'Conversion failed - output not found' });
     }
 
     const downloadUrl = `${SERVER_URL}/outputs/${baseName}.docx`;
-    res.json({ success: true, downloadUrl, fileName: baseName + '.docx' });
 
+    res.json({
+      success: true,
+      message: 'PDF converted to Word successfully',
+      downloadUrl,
+      fileName: baseName + '.docx'
+    });
+
+    // Cleanup input file
     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
 
   } catch (error) {
